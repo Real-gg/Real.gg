@@ -1,4 +1,3 @@
-
 local DISCORD_LINK = "discord.gg/RealHub"
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -45,47 +44,56 @@ local _previewSound = nil
 local _introSound = nil
 local AUDIO_CACHE_FOLDER = "RealHub_AudioCache"
 local function EnsureAudioFolder()
-    if makefolder and not isfolder then return end
-    if isfolder and makefolder then
-        pcall(function()
+    pcall(function()
+        if isfolder and makefolder then
             if not isfolder(AUDIO_CACHE_FOLDER) then makefolder(AUDIO_CACHE_FOLDER) end
-        end)
-    end
+        elseif makefolder and not isfolder then
+            makefolder(AUDIO_CACHE_FOLDER)
+        end
+    end)
 end
 EnsureAudioFolder()
 local function PlayAudioFromURL(url, soundName, volume, looped)
-    if getcustomasset and writefile and isfile and game:GetService("HttpService") then
+    if not url or type(url) ~= "string" or #url < 5 then return nil end
+    soundName = soundName or "RealHub_Audio"
+    volume = (type(volume) == "number") and volume or 0.5
+    looped = looped or false
+    local sound
+    local okCreate = pcall(function()
+        sound = Instance.new("Sound")
+        sound.Name = soundName
+        sound.Volume = volume
+        sound.Looped = looped
+        sound.PlaybackSpeed = 1.0
+    end)
+    if not okCreate or not sound then return nil end
+    if getcustomasset and writefile and isfile then
         local fileName = AUDIO_CACHE_FOLDER .. "/" .. soundName .. ".mp3"
         pcall(function()
-            if not isfolder(AUDIO_CACHE_FOLDER) then makefolder(AUDIO_CACHE_FOLDER) end
+            if isfolder and makefolder and not isfolder(AUDIO_CACHE_FOLDER) then
+                makefolder(AUDIO_CACHE_FOLDER)
+            end
         end)
-        if not pcall(function() return isfile(fileName) end) or not isfile(fileName) then
+        local fileExists = false
+        pcall(function() fileExists = isfile(fileName) end)
+        if not fileExists then
             pcall(function()
                 local audioData = game:GetService("HttpService"):GetAsync(url)
                 writefile(fileName, audioData)
             end)
         end
-        if pcall(function() return isfile(fileName) end) and isfile(fileName) then
-            local sound = Instance.new("Sound")
-            sound.Name = soundName
+        pcall(function() fileExists = isfile(fileName) end)
+        if fileExists then
             pcall(function() sound.SoundId = getcustomasset(fileName) end)
-            if sound.SoundId == "" then
-                sound.SoundId = url
+            if sound.SoundId == "" or not sound.SoundId then
+                pcall(function() sound.SoundId = url end)
             end
-            sound.Volume = volume or 0.5
-            sound.Looped = looped or false
-            sound.PlaybackSpeed = 1.0
             sound.Parent = workspace
-            sound:Play()
+            pcall(function() sound:Play() end)
             return sound
         end
     end
-    local sound = Instance.new("Sound")
-    sound.Name = soundName
-    sound.SoundId = url
-    sound.Volume = volume or 0.5
-    sound.Looped = looped or false
-    sound.PlaybackSpeed = 1.0
+    pcall(function() sound.SoundId = url end)
     sound.Parent = workspace
     pcall(function() sound:Play() end)
     return sound
@@ -237,37 +245,39 @@ local function SaveConfig()
     return false
 end
 local function LoadConfig()
-    if readfile and isfile and isfile(CONFIG_FILE) then
-        local ok, data = pcall(function()
-            return game:GetService("HttpService"):JSONDecode(readfile(CONFIG_FILE))
-        end)
-        if ok and data then
-            if data.UI_SCALE then CFG.UI_SCALE = math.clamp(data.UI_SCALE, 0.6, 1.0) end
-            if data.INF_JUMP_SMOOTH ~= nil then CFG.INF_JUMP_SMOOTH = data.INF_JUMP_SMOOTH end
-            if data.INF_JUMP_FORCE then CFG.INF_JUMP_FORCE = data.INF_JUMP_FORCE end
-            if data.INF_JUMP_DECAY then CFG.INF_JUMP_DECAY = data.INF_JUMP_DECAY end
-            if data.INF_JUMP_MIN_FORCE then CFG.INF_JUMP_MIN_FORCE = data.INF_JUMP_MIN_FORCE end
-                if data.FOV then CFG.FOV = data.FOV end
-            if data.SPEED_NORMAL then CFG.SPEED_NORMAL = data.SPEED_NORMAL end
-            if data.SPEED_STEALING then CFG.SPEED_STEALING = data.SPEED_STEALING end
-            if data.JUMP_POWER then CFG.JUMP_POWER = data.JUMP_POWER end
-            if data.STEAL_RANGE then CFG.STEAL_RANGE = data.STEAL_RANGE end
-            if data.LAGGER_SPEED then CFG.LAGGER_SPEED = data.LAGGER_SPEED end
-            if data.LAGGER_STEALING then CFG.LAGGER_STEALING = data.LAGGER_STEALING end
-            if data.INTRO_SELECTED_TRACK then CFG.INTRO_SELECTED_TRACK = math.clamp(data.INTRO_SELECTED_TRACK, 1, #INTRO_TRACKS) end
-            if data.SHOW_MOBILE_BTNS ~= nil then CFG.SHOW_MOBILE_BTNS = data.SHOW_MOBILE_BTNS end
-            if data.KEYBINDS then
-                for i, kb in ipairs(data.KEYBINDS) do
-                    if KEYBINDS[i] then
-                        local kc = Enum.KeyCode[kb.key]
-                        if kc then KEYBINDS[i].key = kc end
-                    end
-                end
+    if not (readfile and isfile) then return nil end
+    local fileExists = false
+    pcall(function() fileExists = isfile(CONFIG_FILE) end)
+    if not fileExists then return nil end
+    local ok, data = pcall(function()
+        local raw = readfile(CONFIG_FILE)
+        if not raw or #raw == 0 then return nil end
+        return game:GetService("HttpService"):JSONDecode(raw)
+    end)
+    if not ok or type(data) ~= "table" then return nil end
+    if type(data.UI_SCALE) == "number" then CFG.UI_SCALE = math.clamp(data.UI_SCALE, 0.6, 1.0) end
+    if data.INF_JUMP_SMOOTH ~= nil then CFG.INF_JUMP_SMOOTH = data.INF_JUMP_SMOOTH end
+    if type(data.INF_JUMP_FORCE) == "number" then CFG.INF_JUMP_FORCE = data.INF_JUMP_FORCE end
+    if type(data.INF_JUMP_DECAY) == "number" then CFG.INF_JUMP_DECAY = data.INF_JUMP_DECAY end
+    if type(data.INF_JUMP_MIN_FORCE) == "number" then CFG.INF_JUMP_MIN_FORCE = data.INF_JUMP_MIN_FORCE end
+    if type(data.FOV) == "number" then CFG.FOV = data.FOV end
+    if type(data.SPEED_NORMAL) == "number" then CFG.SPEED_NORMAL = data.SPEED_NORMAL end
+    if type(data.SPEED_STEALING) == "number" then CFG.SPEED_STEALING = data.SPEED_STEALING end
+    if type(data.JUMP_POWER) == "number" then CFG.JUMP_POWER = data.JUMP_POWER end
+    if type(data.STEAL_RANGE) == "number" then CFG.STEAL_RANGE = data.STEAL_RANGE end
+    if type(data.LAGGER_SPEED) == "number" then CFG.LAGGER_SPEED = data.LAGGER_SPEED end
+    if type(data.LAGGER_STEALING) == "number" then CFG.LAGGER_STEALING = data.LAGGER_STEALING end
+    if type(data.INTRO_SELECTED_TRACK) == "number" then CFG.INTRO_SELECTED_TRACK = math.clamp(data.INTRO_SELECTED_TRACK, 1, #INTRO_TRACKS) end
+    if data.SHOW_MOBILE_BTNS ~= nil then CFG.SHOW_MOBILE_BTNS = data.SHOW_MOBILE_BTNS end
+    if type(data.KEYBINDS) == "table" then
+        for i, kb in ipairs(data.KEYBINDS) do
+            if KEYBINDS[i] and kb and type(kb) == "table" and type(kb.key) == "string" then
+                local kc = Enum.KeyCode[kb.key]
+                if kc then KEYBINDS[i].key = kc end
             end
-            return data
         end
     end
-    return nil
+    return data
 end
 local function CleanLocks(root)
     for _, n in ipairs(DN) do
