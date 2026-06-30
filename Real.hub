@@ -1,4 +1,32 @@
-local DISCORD_LINK = "discord.gg/RealHub"
+if not isfolder then isfolder = function() return false end end
+if not makefolder then makefolder = function() end end
+if not isfile then isfile = function() return false end end
+if not writefile then writefile = function() end end
+if not readfile then readfile = function() return nil end end
+if not getcustomasset then getcustomasset = function() return "" end end
+if not identifyexecutor then identifyexecutor = function() return "Unknown" end end
+if not syn then syn = nil end
+if not fluxus then fluxus = nil end
+if not delta then delta = nil end
+if not codex then codex = nil end
+if not krnl then krnl = nil end
+if not coroutine.close then coroutine.close = function() end end
+if not task.defer then task.defer = function(fn) task.spawn(fn) end end
+if not typeof then typeof = function(v) return type(v) end end
+
+local _RH_ERRORS = 0
+local _RH_ERRMAX = 100
+local function _RH_WARN(msg)
+    _RH_ERRORS = _RH_ERRORS + 1
+    if _RH_ERRORS <= _RH_ERRMAX then
+        pcall(function() warn("[RealHub] " .. tostring(msg)) end)
+    end
+end
+local function safeCall(name, fn)
+    local ok, err = pcall(fn)
+    if not ok then _RH_WARN(name .. ": " .. tostring(err)) end
+end
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
@@ -13,6 +41,9 @@ local CFG = {
     FOV = 120, STEAL_DELAY = 1.3, STEAL_RANGE = 52,
     SPEED_NORMAL = 60, SPEED_STEALING = 30, JUMP_POWER = 50,
     LAGGER_SPEED = 45, LAGGER_STEALING = 25,
+    INTRO_FLASH_SPEED = 8,
+    INTRO_SELECTED_TRACK = 1,
+    UI_SCALE = 1.0,
     INF_JUMP_SMOOTH = true,
     INF_JUMP_FORCE = 50,
     INF_JUMP_DECAY = 0.95,
@@ -26,6 +57,98 @@ local CFG = {
         MAX_JH = 12, JUMP_TRIG = 1, TP_VEL = -80, autoSwing = true, SWING_CD = 0.08
     }
 }
+local INTRO_TRACKS = {
+    "https://files.catbox.moe/zuid5n.mp3",
+    "https://files.catbox.moe/z6eqnt.mp3",
+    "https://files.catbox.moe/t0nlhv.mp3",
+    "https://files.catbox.moe/mthg31.mp3",
+    "https://files.catbox.moe/ddnbup.mp3",
+    "https://files.catbox.moe/hg5cr4.mp3",
+    "https://files.catbox.moe/nps6gk.mp3",
+    "https://files.catbox.moe/iyw1cb.mp3",
+    "https://files.catbox.moe/2w0wtv.mp3",
+}
+local _previewSound = nil
+local _introSound = nil
+local AUDIO_CACHE_FOLDER = "RealHub_AudioCache"
+local function EnsureAudioFolder()
+    pcall(function()
+        if isfolder and makefolder then
+            if not isfolder(AUDIO_CACHE_FOLDER) then makefolder(AUDIO_CACHE_FOLDER) end
+        elseif makefolder and not isfolder then
+            makefolder(AUDIO_CACHE_FOLDER)
+        end
+    end)
+end
+safeCall("AudioFolder", EnsureAudioFolder)
+local function PlayAudioFromURL(url, soundName, volume, looped)
+    if not url or type(url) ~= "string" or #url < 5 then return nil end
+    soundName = soundName or "RealHub_Audio"
+    volume = (type(volume) == "number") and volume or 0.5
+    looped = looped or false
+    local sound
+    local okCreate = pcall(function()
+        sound = Instance.new("Sound")
+        sound.Name = soundName
+        sound.Volume = volume
+        sound.Looped = looped
+        sound.PlaybackSpeed = 1.0
+    end)
+    if not okCreate or not sound then return nil end
+    if getcustomasset and writefile and isfile then
+        local fileName = AUDIO_CACHE_FOLDER .. "/" .. soundName .. ".mp3"
+        pcall(function()
+            if isfolder and makefolder and not isfolder(AUDIO_CACHE_FOLDER) then
+                makefolder(AUDIO_CACHE_FOLDER)
+            end
+        end)
+        local fileExists = false
+        pcall(function() fileExists = isfile(fileName) end)
+        if not fileExists then
+            pcall(function()
+                local audioData = game:GetService("HttpService"):GetAsync(url)
+                writefile(fileName, audioData)
+            end)
+        end
+        pcall(function() fileExists = isfile(fileName) end)
+        if fileExists then
+            pcall(function() sound.SoundId = getcustomasset(fileName) end)
+            if sound.SoundId == "" or not sound.SoundId then
+                pcall(function() sound.SoundId = url end)
+            end
+            sound.Parent = workspace
+            pcall(function() sound:Play() end)
+            return sound
+        end
+    end
+    pcall(function() sound.SoundId = url end)
+    sound.Parent = workspace
+    pcall(function() sound:Play() end)
+    return sound
+end
+local function StopPreviewSound()
+    if _previewSound and _previewSound.Parent then
+        pcall(function() _previewSound:Stop() end)
+        pcall(function() _previewSound:Destroy() end)
+    end
+    _previewSound = nil
+end
+local function PlayPreviewTrack(idx)
+    StopPreviewSound()
+    if not INTRO_TRACKS[idx] then return end
+    task.spawn(function()
+        _previewSound = PlayAudioFromURL(INTRO_TRACKS[idx], "RealHub_Preview_" .. idx, 0.5, false)
+        if _previewSound then
+            task.delay(15, function()
+                if _previewSound and _previewSound.Parent then
+                    pcall(function() _previewSound:Stop() end)
+                    pcall(function() _previewSound:Destroy() end)
+                    _previewSound = nil
+                end
+            end)
+        end
+    end)
+end
 local function DetectDevice()
     if UIS.TouchEnabled and not UIS.KeyboardEnabled then
         CFG.IS_MOBILE = true
@@ -35,7 +158,7 @@ local function DetectDevice()
         CFG.UI_SCALE = 1.0
     end
 end
-DetectDevice()
+safeCall("DetectDevice", DetectDevice)
 CFG.SHOW_MOBILE_BTNS = CFG.IS_MOBILE
 local KEYBINDS = {
     {name = "AimBot", key = Enum.KeyCode.F, type = "toggle"},
@@ -104,6 +227,7 @@ local function SaveConfig()
         INF_JUMP_FORCE = CFG.INF_JUMP_FORCE,
         INF_JUMP_DECAY = CFG.INF_JUMP_DECAY,
         INF_JUMP_MIN_FORCE = CFG.INF_JUMP_MIN_FORCE,
+        INTRO_SELECTED_TRACK = CFG.INTRO_SELECTED_TRACK,
         FOV = CFG.FOV,
         SPEED_NORMAL = CFG.SPEED_NORMAL,
         SPEED_STEALING = CFG.SPEED_STEALING,
@@ -130,6 +254,7 @@ local function SaveConfig()
         SpeedBoostOn = ST.SpeedBoostOn,
         InfJumpOn = ST.InfJumpOn,
         NightOn = ST.NightOn,
+        INTRO_SELECTED_TRACK = CFG.INTRO_SELECTED_TRACK,
         ESPBoxOn = ST.ESPBoxOn,
         ESPTracerOn = ST.ESPTracerOn,
         ESPHighlightOn = ST.ESPHighlightOn,
@@ -170,6 +295,7 @@ local function LoadConfig()
     if type(data.STEAL_RANGE) == "number" then CFG.STEAL_RANGE = data.STEAL_RANGE end
     if type(data.LAGGER_SPEED) == "number" then CFG.LAGGER_SPEED = data.LAGGER_SPEED end
     if type(data.LAGGER_STEALING) == "number" then CFG.LAGGER_STEALING = data.LAGGER_STEALING end
+    if type(data.INTRO_SELECTED_TRACK) == "number" then CFG.INTRO_SELECTED_TRACK = math.clamp(data.INTRO_SELECTED_TRACK, 1, #INTRO_TRACKS) end
     if data.SHOW_MOBILE_BTNS ~= nil then CFG.SHOW_MOBILE_BTNS = data.SHOW_MOBILE_BTNS end
     if type(data.KEYBINDS) == "table" then
         for i, kb in ipairs(data.KEYBINDS) do
@@ -474,7 +600,7 @@ local function ToggleInfJump()
         _currentJumpForce = CFG.INF_JUMP_FORCE
     end
 end
-ToggleInfJump()
+safeCall("InfJump", ToggleInfJump)
 local function StopSpeed()
     if ST.SpdC then ST.SpdC:Disconnect(); ST.SpdC = nil end
 end
@@ -502,7 +628,7 @@ local function ToggleSpeed()
     ST.SpeedBoostOn = not ST.SpeedBoostOn
     if ST.SpeedBoostOn then StartSpeed() else StopSpeed() end
 end
-StartSpeed()
+safeCall("Speed", StartSpeed)
 local AutoMoveThread = nil
 local function SyncToggles()
     if alF then
@@ -565,7 +691,8 @@ local _ragdollStartTime = 0
 local _ragdollActive = false
 local _ragdollDuration = 1.5
 local function showRagdollTimer(on)
-    if on then
+    local head = LP.Character and LP.Character:FindFirstChild("Head")
+    if on and head then
         _ragdollActive = true
         _ragdollStartTime = tick()
     elseif on == "stop" then
@@ -686,7 +813,7 @@ local function EnableAR()
         setupForChar(nc)
     end))
 end
-EnableAR()
+safeCall("AntiRagdoll", EnableAR)
 local _noclipConns = {}
 local function EnableNoclip()
     ST.NoclipOn = true
@@ -711,7 +838,7 @@ end
 local function ToggleNoclip(on)
     if on then EnableNoclip() else DisableNoclip() end
 end
-EnableNoclip()
+safeCall("Noclip", EnableNoclip)
 local function ToggleUnwalk(on)
     ST.UnwalkOn = on
     if on then
@@ -774,6 +901,7 @@ local function RefreshScript()
     ST.DropActive = false
     _refreshing = false
 end
+safeCall("CharEvents", function()
 LP.CharacterRemoving:Connect(function()
     task.spawn(function()
         task.wait(1)
@@ -794,13 +922,22 @@ Players.PlayerRemoving:Connect(function(p)
         end)
     end
 end)
+end)
 local gui = Instance.new("ScreenGui")
 gui.Name = "RealHub_HUD"
 gui.ResetOnSpawn = false
 gui.DisplayOrder = 9999
 gui.IgnoreGuiInset = true
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-gui.Parent = game:GetService("CoreGui")
+safeCall("GUI", function() gui.Parent = game:GetService("CoreGui") end)
+local introFrame = Instance.new("Frame")
+introFrame.Name = "RealHub_Intro"
+introFrame.Size = UDim2.new(1, 0, 1, 0)
+introFrame.Position = UDim2.new(0, 0, 0, 0)
+introFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+introFrame.BackgroundTransparency = 0.3
+introFrame.ZIndex = 100000
+safeCall("IntroFrame", function() introFrame.Parent = gui end)
 local fps, lastT = 0, tick()
 local function getPing()
     local ok, r = pcall(function()
@@ -884,6 +1021,86 @@ RunService.Heartbeat:Connect(function(dt)
         if not a.s or not a.s.Parent then table.remove(_outlineAnims, i)
         else a.r = (a.r + 50 * dt) % 360; a.g.Rotation = a.r; a.s.Thickness = a.th + ((math.sin(now * 2) + 1) / 2) * 2 end
     end
+end)
+local introTitle = Instance.new("TextLabel")
+introTitle.Name = "IntroTitle"
+introTitle.Size = UDim2.new(0, 600, 0, 90)
+introTitle.Position = UDim2.new(0, -650, 0.5, -100)
+introTitle.BackgroundTransparency = 1
+introTitle.Text = "RealHub"
+introTitle.Font = Enum.Font.GothamBlack
+introTitle.TextSize = 72
+introTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+introTitle.TextStrokeTransparency = 0
+introTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+introTitle.ZIndex = 100001
+introTitle.Parent = introFrame
+mkGlow(introTitle, true)
+local introDiscord = Instance.new("TextLabel")
+introDiscord.Name = "IntroDiscord"
+introDiscord.Size = UDim2.new(0, 500, 0, 50)
+introDiscord.Position = UDim2.new(1, 60, 0.5, 0)
+introDiscord.BackgroundTransparency = 1
+introDiscord.Text = DISCORD_LINK
+introDiscord.Font = Enum.Font.GothamBold
+introDiscord.TextSize = 38
+introDiscord.TextColor3 = Color3.fromRGB(100, 255, 100)
+introDiscord.TextStrokeTransparency = 0
+introDiscord.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+introDiscord.ZIndex = 100001
+introDiscord.Parent = introFrame
+mkGlow(introDiscord, false)
+local _introFlashC = nil
+local function StartIntroFlash()
+    local flashColors = {
+        Color3.fromRGB(255, 50, 50),
+        Color3.fromRGB(255, 255, 255),
+        Color3.fromRGB(50, 255, 50),
+        Color3.fromRGB(255, 200, 50),
+        Color3.fromRGB(255, 255, 255),
+    }
+    local colorIdx = 1
+    local lastSwitch = 0
+    local flashSpeed = 1 / math.max(CFG.INTRO_FLASH_SPEED or 8, 1)
+    _introFlashC = RunService.Heartbeat:Connect(function()
+        if not introTitle or not introTitle.Parent then return end
+        local now = tick()
+        if now - lastSwitch >= flashSpeed then
+            lastSwitch = now
+            colorIdx = (colorIdx % #flashColors) + 1
+            introTitle.TextColor3 = flashColors[colorIdx]
+            local discIdx = ((colorIdx + 2) % #flashColors) + 1
+            introDiscord.TextColor3 = flashColors[discIdx]
+        end
+    end)
+end
+safeCall("Intro", function()
+task.spawn(function()
+    RunService.RenderStepped:Wait()
+    local trackUrl = INTRO_TRACKS[CFG.INTRO_SELECTED_TRACK] or INTRO_TRACKS[1]
+    if trackUrl then
+        task.spawn(function()
+            _introSound = PlayAudioFromURL(trackUrl, "RealHub_IntroAudio", 0.5, false)
+        end)
+    end
+    StartIntroFlash()
+    task.wait(0.3)
+    local slideInfo = TweenInfo.new(0.8, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+    TweenService:Create(introTitle, slideInfo, {Position = UDim2.new(0.5, -300, 0.5, -100)}):Play()
+    TweenService:Create(introDiscord, slideInfo, {Position = UDim2.new(0.5, 20, 0.5, 0)}):Play()
+    task.wait(4)
+    local fadeInfo = TweenInfo.new(1.0, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+    TweenService:Create(introTitle, fadeInfo, {TextTransparency = 1, TextStrokeTransparency = 1}):Play()
+    TweenService:Create(introDiscord, fadeInfo, {TextTransparency = 1, TextStrokeTransparency = 1}):Play()
+    TweenService:Create(introFrame, fadeInfo, {BackgroundTransparency = 1}):Play()
+    task.wait(1.2)
+    if _introFlashC then _introFlashC:Disconnect(); _introFlashC = nil end
+    if _introSound and _introSound.Parent then
+        _introSound:Stop(); _introSound:Destroy(); _introSound = nil
+    end
+    StopPreviewSound()
+    if introFrame and introFrame.Parent then introFrame:Destroy() end
+end)
 end)
 local mainF = Instance.new("Frame")
 mainF.Name = "MIF"
@@ -1158,7 +1375,7 @@ local function ToggleNight(on)
         if _bloomEffect then _bloomEffect.Enabled = false end
     end
 end
-task.defer(function() ToggleNight(true) end)
+safeCall("Night", function() task.defer(function() ToggleNight(true) end) end)
 setP = Instance.new("Frame")
 setP.Name = "SettingsPanel"
 setP.Size = UDim2.new(0, 310, 0, 340)
@@ -1501,6 +1718,45 @@ for i = 1, #KEYBINDS do
     mkKBRow(kbC, i)
 end
 local otherC = tabContents[5]
+local musicRow = Instance.new("Frame")
+musicRow.Size = UDim2.new(1, 0, 0, 38)
+musicRow.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+musicRow.BackgroundTransparency = 0.05
+musicRow.Parent = otherC
+Instance.new("UICorner", musicRow).CornerRadius = UDim.new(0, 6)
+mkOutline(musicRow, 1)
+local musicLb = Instance.new("TextLabel")
+musicLb.Size = UDim2.new(0, 100, 1, 0)
+musicLb.Position = UDim2.new(0, 8, 0, 0)
+musicLb.BackgroundTransparency = 1
+musicLb.Text = "Intro Music"
+musicLb.Font = Enum.Font.GothamBlack
+musicLb.TextSize = 11
+musicLb.TextXAlignment = Enum.TextXAlignment.Left
+musicLb.TextColor3 = Color3.fromRGB(255,255,255)
+musicLb.Parent = musicRow
+mkGlow(musicLb)
+local musicBtn = Instance.new("TextButton")
+musicBtn.Size = UDim2.new(0, 90, 0, 26)
+musicBtn.Position = UDim2.new(1, -100, 0.5, -13)
+musicBtn.BackgroundColor3 = Color3.fromRGB(20,20,20)
+musicBtn.BackgroundTransparency = 0.05
+musicBtn.Text = "Sound " .. CFG.INTRO_SELECTED_TRACK
+musicBtn.Font = Enum.Font.GothamBold
+musicBtn.TextSize = 11
+musicBtn.TextColor3 = Color3.fromRGB(255,255,255)
+musicBtn.TextXAlignment = Enum.TextXAlignment.Center
+musicBtn.Parent = musicRow
+Instance.new("UICorner", musicBtn).CornerRadius = UDim.new(0, 6)
+mkOutline(musicBtn, 1)
+mkGlow(musicBtn, false)
+musicBtn.MouseButton1Click:Connect(function()
+    CFG.INTRO_SELECTED_TRACK = (CFG.INTRO_SELECTED_TRACK % #INTRO_TRACKS) + 1
+    musicBtn.Text = "Sound " .. CFG.INTRO_SELECTED_TRACK
+    mkGlow(musicBtn, true)
+    task.delay(1.5, function() mkGlow(musicBtn, false) end)
+    PlayPreviewTrack(CFG.INTRO_SELECTED_TRACK)
+end)
 mkRow(otherC, "UI Scale", CFG.UI_SCALE, function(v)
     CFG.UI_SCALE = math.clamp(v, 0.6, 1.0)
     ApplyUIScale()
@@ -1825,6 +2081,7 @@ local function updateESP()
         end
     end
 end
+safeCall("ESP", function()
 RunService.Heartbeat:Connect(updateESP)
 function EnableESPBox()
     for _, p in ipairs(Players:GetPlayers()) do espAddPlayer(p) end
@@ -1865,6 +2122,7 @@ Players.PlayerAdded:Connect(function(p)
 end)
 Players.PlayerRemoving:Connect(function(p)
     espRemovePlayer(p)
+end)
 end)
 local speedBB = nil
 local speedText = nil
@@ -2097,6 +2355,7 @@ local function AimbotCore(dt)
         end
     end
 end
+safeCall("AimbotConn", function()
 RunService.Heartbeat:Connect(function(dt)
     if ST.isAimbotActive then AimbotCore(dt) end
 end)
@@ -2134,6 +2393,7 @@ LP.CharacterAdded:Connect(function(char)
         end
     end
     task.delay(1, createSpeedBillboard)
+end)
 end)
 local isGrab = false
 local _grabHL = nil
@@ -2226,10 +2486,13 @@ local function StopGrab()
     clH()
 end
 local grabToggle = false
+safeCall("FPS", function()
 RunService.Heartbeat:Connect(function()
-    fpT.Text = "FPS: " .. fps
-    pnT.Text = "Ping: " .. getPing()
+    pcall(function() fpT.Text = "FPS: " .. fps end)
+    pcall(function() pnT.Text = "Ping: " .. getPing() end)
 end)
+end)
+safeCall("Config", function()
 task.delay(3, function()
     local data = LoadConfig()
     if data then
@@ -2238,6 +2501,8 @@ task.delay(3, function()
         end
     end
 end)
+end)
+safeCall("CtrlEnable", function()
 task.defer(function()
     while _G.ExtRunning do
         task.wait(2)
@@ -2246,6 +2511,9 @@ task.defer(function()
         end)
     end
 end)
+end)
+safeCall("Print", function()
 print("[RealHub] Ultimate Edition loaded successfully!")
 print("[RealHub] Device: " .. (CFG.IS_MOBILE and "Mobile" or "PC"))
 print("[RealHub] UI Scale: " .. CFG.UI_SCALE)
+end)
