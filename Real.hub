@@ -1,24 +1,8 @@
-if not isfolder then isfolder = function() return false end end
-if not makefolder then makefolder = function() end end
-if not isfile then isfile = function() return false end end
-if not writefile then writefile = function() end end
-if not readfile then readfile = function() return nil end end
-if not getcustomasset then getcustomasset = function() return "" end end
-if not identifyexecutor then identifyexecutor = function() return "Unknown" end end
-if not syn then syn = nil end
-if not fluxus then fluxus = nil end
-if not delta then delta = nil end
-if not codex then codex = nil end
-if not krnl then krnl = nil end
-if not coroutine.close then coroutine.close = function() end end
-if not task.defer then task.defer = function(fn) task.spawn(fn) end end
-if not typeof then typeof = function(v) return type(v) end end
-
 local _RH_ERRORS = 0
 local _RH_ERRMAX = 100
 local function _RH_WARN(msg)
-    _RH_ERRORS = _RH_ERRORS + 1
-    if _RH_ERRORS <= _RH_ERRMAX then
+    _RH_ERRORS = (_RH_ERRORS or 0) + 1
+    if (_RH_ERRORS or 0) <= (_RH_ERRMAX or 100) then
         pcall(function() warn("[RealHub] " .. tostring(msg)) end)
     end
 end
@@ -380,7 +364,7 @@ local function DoDrop()
     ST.DropActive = true
     local hrp = gH()
     if not hrp then ST.DropActive = false; return end
-    local originalVel = hrp.Velocity
+    local originalVel = hrp.Velocity or Vector3.zero
     table.insert(ST.DropConns, RunService.Stepped:Connect(function()
         if not ST.DropActive then return end
         for _, p in ipairs(Players:GetPlayers()) do
@@ -454,7 +438,7 @@ local function ToggleAimbot(forceState)
         if abBtn and mkGlow then mkGlow(abBtn, false) end
         local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
         local h = r and r.Parent and r.Parent:FindFirstChildOfClass("Humanoid")
-        if r then r.Velocity = r.Velocity * 0.3 end
+        if r then r.Velocity = (r.Velocity or Vector3.zero) * 0.3 end
         pcall(function() CleanLocks(r) end)
         if h then h.AutoRotate = true end
         pcall(function() if _aV and _aV.Parent then _aV:Destroy() end end)
@@ -561,13 +545,13 @@ local function ToggleInfJump()
             if hr and hr.Parent then
                 if CFG.INF_JUMP_SMOOTH then
                     local smoothForce = math.max(CFG.INF_JUMP_MIN_FORCE, _currentJumpForce)
-                    hr.Velocity = Vector3.new(hr.Velocity.X, smoothForce, hr.Velocity.Z)
+                    hr.Velocity = Vector3.new((hr.Velocity and hr.Velocity.X) or 0, smoothForce, (hr.Velocity and hr.Velocity.Z) or 0)
                     _currentJumpForce = _currentJumpForce * CFG.INF_JUMP_DECAY
                     if _currentJumpForce < CFG.INF_JUMP_MIN_FORCE then
                         _currentJumpForce = CFG.INF_JUMP_FORCE
                     end
                 else
-                    hr.Velocity = Vector3.new(hr.Velocity.X, CFG.INF_JUMP_FORCE, hr.Velocity.Z)
+                    hr.Velocity = Vector3.new((hr.Velocity and hr.Velocity.X) or 0, CFG.INF_JUMP_FORCE, (hr.Velocity and hr.Velocity.Z) or 0)
                 end
             end
         end))
@@ -582,13 +566,13 @@ local function ToggleInfJump()
                     _lastJumpTime = tick()
                     if CFG.INF_JUMP_SMOOTH then
                         local smoothForce = math.max(CFG.INF_JUMP_MIN_FORCE, _currentJumpForce)
-                        hr.Velocity = Vector3.new(hr.Velocity.X, smoothForce, hr.Velocity.Z)
+                        hr.Velocity = Vector3.new((hr.Velocity and hr.Velocity.X) or 0, smoothForce, (hr.Velocity and hr.Velocity.Z) or 0)
                         _currentJumpForce = _currentJumpForce * CFG.INF_JUMP_DECAY
                         if _currentJumpForce < CFG.INF_JUMP_MIN_FORCE then
                             _currentJumpForce = CFG.INF_JUMP_FORCE
                         end
                     else
-                        hr.Velocity = Vector3.new(hr.Velocity.X, CFG.INF_JUMP_FORCE, hr.Velocity.Z)
+                        hr.Velocity = Vector3.new((hr.Velocity and hr.Velocity.X) or 0, CFG.INF_JUMP_FORCE, (hr.Velocity and hr.Velocity.Z) or 0)
                     end
                 end
             end
@@ -619,8 +603,9 @@ local function StartSpeed()
             md = hm.MoveDirection
             if md.Magnitude < 0.01 then return end
         end
-        local tS = iS() and gSS() or gNS()
-        hr.Velocity = Vector3.new(md.X * tS, hr.Velocity.Y, md.Z * tS)
+        local tS = (iS() and gSS()) or gNS() or 0
+        tS = tS or 0
+        hr.Velocity = Vector3.new(md.X * tS, (hr.Velocity and hr.Velocity.Y) or 0, md.Z * tS)
     end))
     _G.ExtSpdC = ST.SpdC
 end
@@ -644,7 +629,7 @@ function StopAutoMove()
     if AutoMoveThread then pcall(function() coroutine.close(AutoMoveThread) end) AutoMoveThread = nil end
     ST.AutoLeftOn = false; ST.AutoRightOn = false
     local h = gH()
-    if h then pcall(function() h.Velocity = Vector3.new(0, h.Velocity.Y, 0) end) end
+    if h then pcall(function() h.Velocity = Vector3.new(0, (h.Velocity and h.Velocity.Y) or 0, 0) end) end
     SyncToggles()
 end
 function StartAutoMove(mode)
@@ -660,7 +645,7 @@ function StartAutoMove(mode)
             local h = gH()
             if not h or not h.Parent then task.wait(0.01); continue end
             if pointIdx > maxPointIdx then
-                h.Velocity = Vector3.new(0, h.Velocity.Y, 0)
+                h.Velocity = Vector3.new(0, (h.Velocity and h.Velocity.Y) or 0, 0)
                 StopAutoMove(); return
             end
             local tx, ty, tz = GetCoord(coords[pointIdx])
@@ -670,7 +655,7 @@ function StartAutoMove(mode)
             local yDist = math.abs(toTarget.Y)
             if xzDist < AUTO_MOVE_XZ_TOLERANCE and yDist < AUTO_MOVE_Y_TOLERANCE then
                 if pointIdx >= maxPointIdx then
-                    h.Velocity = Vector3.new(0, h.Velocity.Y, 0)
+                    h.Velocity = Vector3.new(0, (h.Velocity and h.Velocity.Y) or 0, 0)
                     StopAutoMove(); return
                 else
                     pointIdx = pointIdx + 1
@@ -679,7 +664,7 @@ function StartAutoMove(mode)
                 local spd = (pointIdx >= 3) and gSS() or gNS()
                 local moveDir = Vector3.new(toTarget.X, 0, toTarget.Z)
                 if moveDir.Magnitude > 0 then
-                    h.Velocity = Vector3.new(moveDir.Unit.X * spd, h.Velocity.Y, moveDir.Unit.Z * spd)
+                    h.Velocity = Vector3.new(moveDir.Unit.X * (spd or 0), (h.Velocity and h.Velocity.Y) or 0, moveDir.Unit.Z * (spd or 0))
                 end
             end
             task.wait(0.01)
@@ -752,14 +737,14 @@ local function EnableAR()
             showRagdollTimer(true)
             task.spawn(function()
                 while _ragdollActive do
-                    local elapsed = tick() - _ragdollStartTime
-                    if elapsed >= _ragdollDuration then
+                    local elapsed = tick() - (_ragdollStartTime or 0)
+                    if elapsed >= (_ragdollDuration or 1.5) then
                         break
                     end
                     if IsRag() or h:GetState() == Enum.HumanoidStateType.GettingUp then
                         CleanCon(c)
                         pcall(function() h:ChangeState(Enum.HumanoidStateType.Running) end)
-                        local v = r.Velocity
+                        local v = r.Velocity or Vector3.zero
                         if v.Magnitude > 30 then
                             r.Velocity = Vector3.new(0, math.min(v.Y, 5), 0)
                         end
@@ -785,12 +770,12 @@ local function EnableAR()
             if not r or not r.Parent or not h or not h.Parent then return end
             if IsRag() then
                 StartRec()
-                local v = r.Velocity
-                if (v - ST.AntiRagLastV).Magnitude > 50 and v.Magnitude > 20 then
+                local v = r.Velocity or Vector3.zero
+                if (v - (ST.AntiRagLastV or Vector3.zero)).Magnitude > 50 and v.Magnitude > 20 then
                     r.Velocity = Vector3.new(0, math.min(v.Y, 5), 0)
                 end
             end
-            if r and r.Parent then ST.AntiRagLastV = r.Velocity end
+            if r and r.Parent then ST.AntiRagLastV = r.Velocity or Vector3.zero end
         end))
         table.insert(ST.AntiRagC, c.DescendantAdded:Connect(function(o)
             pcall(function()
@@ -938,12 +923,13 @@ introFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 introFrame.BackgroundTransparency = 0.3
 introFrame.ZIndex = 100000
 safeCall("IntroFrame", function() introFrame.Parent = gui end)
-local fps, lastT = 0, tick()
+local fps = 0
+local lastT = tick()
 local function getPing()
     local ok, r = pcall(function()
         return Stats.Network.ServerStatsItem["Data Ping"]:GetValueString()
     end)
-    return ok and r or "0"
+    return ok and tostring(r) or "0"
 end
 local _glowAnims = {}
 local ES = 50
@@ -1005,10 +991,10 @@ mkOutline = function(ui, th)
 end
 RunService.Heartbeat:Connect(function(dt)
     local n = tick()
-    local d = n - lastT
+    local d = n - (lastT or tick())
     lastT = n
-    if d > 0 then fps = math.floor(1/d) end
-    _curFOV = _curFOV + (math.clamp(CFG.FOV, 1, 120) - _curFOV) * (1 - math.exp(-4 * dt))
+    if d and d > 0 then fps = math.floor(1/d) or 0 end
+    _curFOV = (_curFOV or 70) + (math.clamp(CFG.FOV, 1, 120) - (_curFOV or 70)) * (1 - math.exp(-4 * (dt or 0)))
     cam.FieldOfView = _curFOV
     for i = #_glowAnims, 1, -1 do
         local a = _glowAnims[i]
@@ -2190,7 +2176,7 @@ RunService.Heartbeat:Connect(function()
     if not speedBB or not speedBB.Parent then createSpeedBillboard() end
     if speedBB and speedBB.Parent and speedText then
         if speedBB.Adornee ~= head then speedBB.Adornee = head end
-        local vel = hrp.Velocity
+        local vel = hrp.Velocity or Vector3.zero
         local horizSpeed = Vector3.new(vel.X, 0, vel.Z).Magnitude
         speedText.Text = string.format("Speed: %.1f", horizSpeed)
         local camPos = cam.CFrame.Position
@@ -2257,9 +2243,9 @@ local function AimbotCore(dt)
         if _aV then pcall(function() _aV.AngularVelocity = Vector3.zero end) end
         return
     end
-    table.insert(_jH, _t.Velocity.Y)
+    table.insert(_jH, (_t.Velocity and _t.Velocity.Y) or 0)
     if #_jH > CFG.AIM.MAX_JH then table.remove(_jH, 1) end
-    local velY, posY = _t.Velocity.Y, _t.Position.Y
+    local velY, posY = (_t.Velocity and _t.Velocity.Y) or 0, _t.Position.Y
     if posY > _pY then _pY = posY end
     local mode = "normal"
     local us = 0
@@ -2270,15 +2256,15 @@ local function AimbotCore(dt)
     if _iJD and velY < CFG.AIM.TP_VEL then _tDD = true; mode = "tp_down"
     elseif _iJD and velY < -20 and (posY < _pY - 5) then mode = "falling"
     elseif _iJD and math.abs(velY) < 5 and posY < _lTY + 2 then
-        _nMT = _nMT + 1
+        _nMT = (_nMT or 0) + 1
         if _nMT > 8 then _iJD = false; _tDD = false; _pY = 0; _nMT = 0; _jH = {}; mode = "normal" end
     else _nMT = 0 end
     _lTY = posY
     if _iJD and mode == "normal" then mode = _tDD and "tp_down" or "infinite_jump" end
-    local pos, vel = _t.Position, _t.Velocity
-    local dd = (vel - _vS).Magnitude
-    if dd < 250 then _vS = _vS * 0.78 + vel * 0.22 end
-    local sv, ss = _vS, _vS.Magnitude
+    local pos, vel = _t.Position, (_t.Velocity or Vector3.zero)
+    local dd = (vel - (_vS or Vector3.zero)).Magnitude
+    if dd < 250 then _vS = (_vS or Vector3.zero) * 0.78 + vel * 0.22 end
+    local sv, ss = _vS or Vector3.zero, (_vS and _vS.Magnitude) or 0
     if ss > 75 then sv = sv.Unit * 75; ss = 75 end
     local targetSpeed = CFG.SPEED_NORMAL
     local speedFactor = math.clamp(ss / 50, 0, 1)
@@ -2323,7 +2309,7 @@ local function AimbotCore(dt)
     else
         _aV.AngularVelocity = Vector3.zero
     end
-    local tHV = Vector3.new(_t.Velocity.X, 0, _t.Velocity.Z)
+    local tHV = Vector3.new((_t.Velocity and _t.Velocity.X) or 0, 0, (_t.Velocity and _t.Velocity.Z) or 0)
     local ms = tHV.Magnitude
     local pd
     if ms > 5 then pd = tHV.Unit
@@ -2339,9 +2325,9 @@ local function AimbotCore(dt)
     if isE then vv = Vector3.new(0, math.sign(md2.Y) * CFG.AIM.VERT_SPEED * 1.3, 0)
     elseif math.abs(md2.Y) > 3 then vv = Vector3.new(0, math.sign(md2.Y) * CFG.AIM.VERT_SPEED, 0)
     else vv = Vector3.new(0, -2, 0) end
-    _iV = _iV:Lerp(hv + vv, 1 - math.exp(-18 * dt))
-    _smoothVel = _smoothVel:Lerp(_iV, 1 - math.exp(-25 * dt))
-    root.Velocity = _smoothVel
+    _iV = (_iV or Vector3.zero):Lerp(hv + vv, 1 - math.exp(-18 * (dt or 0)))
+    _smoothVel = (_smoothVel or Vector3.zero):Lerp(_iV or Vector3.zero, 1 - math.exp(-25 * (dt or 0)))
+    root.Velocity = _smoothVel or Vector3.zero
     if CFG.AIM.autoSwing and not _sCD then
         local bat = char:FindFirstChild("Bat")
         if bat and bat:IsA("Tool") then
@@ -2363,9 +2349,9 @@ local _aimCleanTick = 0
 RunService.RenderStepped:Connect(function()
     local r = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
     if r and ST.isAimbotActive then
-        local v = r.Velocity
-        if math.abs(v.X) > 250 or math.abs(v.Z) > 250 then r.Velocity = _smoothVel end
-        _aimCleanTick = _aimCleanTick + 1
+        local v = r.Velocity or Vector3.zero
+        if math.abs(v.X) > 250 or math.abs(v.Z) > 250 then r.Velocity = _smoothVel or Vector3.zero end
+        _aimCleanTick = (_aimCleanTick or 0) + 1
         if _aimCleanTick % 15 == 0 then pcall(function() CleanLocks(r) end) end
     end
 end)
@@ -2470,10 +2456,11 @@ local function StartGrab()
             local dir = (target.Position - h.Position)
             local dist = dir.Magnitude
             if dist > 5 then
-                local speed = iS() and gSS() or gNS()
-                h.Velocity = dir.Unit * speed
+                local speed = (iS() and gSS()) or gNS() or 0
+                speed = speed or 0
+                h.Velocity = (dir.Unit and dir.Unit * speed) or Vector3.zero
             else
-                h.Velocity = Vector3.new(0, h.Velocity.Y, 0)
+                h.Velocity = Vector3.new(0, (h.Velocity and h.Velocity.Y) or 0, 0)
             end
         else
             clH()
